@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fiduciary Monitor — 401(k) Plans</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#14213D; --ink-soft:#5B6472;
+    --paper:#F5F3EE; --paper-raised:#FFFFFF;
+    --line:#E1DDD1; --line-strong:#C9C4B4;
+    --forest:#2F5233; --forest-soft:#E7EEE6;
+    --amber:#9C6B18; --amber-soft:#F3EAD6;
+    --brick:#8C2F2F; --brick-soft:#F3E2DF;
+    --slate:#33506B; --slate-soft:#E7EDF1;
+    --gold:#C9A25C;
+    --serif:'Source Serif 4', Georgia, serif;
+    --sans:'IBM Plex Sans', -apple-system, sans-serif;
+    --mono:'IBM Plex Mono', 'SF Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ font-family:var(--sans); background:var(--paper); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  #app{display:flex; min-height:100vh;}
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{ width:250px; flex-shrink:0; background:var(--ink); color:#EDEEF2; padding:26px 18px; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto; }
+  .brand{ font-family:var(--serif); font-size:19px; font-weight:600; letter-spacing:0.01em; line-height:1.25; margin-bottom:2px; }
+  .brand-sub{ font-size:10px; letter-spacing:0.13em; text-transform:uppercase; color:#8A93A8; margin-bottom:22px; font-weight:500; }
+
+  .plan-select-label{ font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:#8A93A8; font-weight:600; margin-bottom:7px; }
+  .plan-select{ width:100%; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14); color:#fff; font-family:var(--sans); font-size:13px; padding:9px 10px; border-radius:4px; margin-bottom:8px; }
+  .plan-select option{ color:#111; }
+  .plan-meta{ font-size:11px; color:#9BA3B5; line-height:1.6; margin-bottom:18px; }
+  .link-row{ display:flex; gap:10px; margin-bottom:20px; }
+  .link-row a, .link-row span{ font-size:11px; color:var(--gold); cursor:pointer; font-weight:600; }
+
+  .nav-item{ display:flex; align-items:center; gap:10px; padding:9px 11px; margin-bottom:3px; border-radius:3px; font-size:13px; font-weight:500; cursor:pointer; color:#C4C9D6; transition:background .12s, color .12s; border-left:2px solid transparent; }
+  .nav-item:hover{ background:rgba(255,255,255,0.06); color:#fff; }
+  .nav-item.active{ background:rgba(255,255,255,0.09); color:#fff; border-left:2px solid var(--gold); }
+  .nav-count{ margin-left:auto; font-family:var(--mono); font-size:10px; color:#8A93A8; background:rgba(255,255,255,0.08); padding:1px 6px; border-radius:8px; }
+  .nav-divider{ height:1px; background:rgba(255,255,255,0.1); margin:14px 0; }
+  .sidebar-foot{ margin-top:auto; padding-top:16px; border-top:1px solid rgba(255,255,255,0.1); font-size:11px; color:#7E869B; line-height:1.6; }
+
+  /* ---------- Main ---------- */
+  .main{ flex:1; padding:34px 42px; max-width:1220px; }
+  .page-head{ display:flex; align-items:flex-end; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:14px;}
+  .page-title{ font-family:var(--serif); font-size:26px; font-weight:600; margin:0 0 4px; }
+  .page-desc{ color:var(--ink-soft); font-size:13.5px; max-width:620px; }
+  .btn{ font-family:var(--sans); font-size:12.5px; font-weight:600; cursor:pointer; padding:9px 16px; border-radius:3px; border:1px solid var(--line-strong); background:var(--paper-raised); color:var(--ink); transition:all .12s; }
+  .btn:hover{ border-color:var(--ink); }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+  .btn-primary{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .btn-primary:hover{ background:#233258; }
+  .btn-ghost{ border-color:transparent; background:none; }
+  .btn-ghost:hover{ background:var(--slate-soft); border-color:transparent; }
+  .btn-sm{ padding:6px 11px; font-size:11.5px; }
+  .btn-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  input[type=file]{ display:none; }
+
+  /* ---------- Table ---------- */
+  .table-wrap{ background:var(--paper-raised); border:1px solid var(--line); border-radius:5px; overflow:hidden; overflow-x:auto; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  thead th{ text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--ink-soft); font-weight:600; padding:11px 14px; border-bottom:1px solid var(--line); background:#FAF9F5; white-space:nowrap; }
+  tbody td{ padding:11px 14px; border-bottom:1px solid var(--line); vertical-align:middle; white-space:nowrap; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr{ cursor:pointer; transition:background .1s; }
+  tbody tr:hover{ background:#FAF9F4; }
+  .fund-name{ font-weight:600; font-size:13px; }
+  .fund-cat{ color:var(--ink-soft); font-size:11px; }
+  .mono{ font-family:var(--mono); }
+  .num{ text-align:right; font-family:var(--mono); }
+  .tag{ display:inline-block; font-size:10px; padding:2px 7px; border-radius:3px; background:var(--slate-soft); color:var(--slate); font-weight:600; }
+
+  .status-pill{ display:inline-flex; align-items:center; gap:5px; padding:3px 9px 3px 7px; border-radius:20px; font-size:10.5px; font-weight:600; letter-spacing:.02em; white-space:nowrap; }
+  .status-pill::before{ content:''; width:6px; height:6px; border-radius:50%; }
+  .status-green{ background:var(--forest-soft); color:var(--forest); }
+  .status-green::before{ background:var(--forest); }
+  .status-yellow{ background:var(--amber-soft); color:var(--amber); }
+  .status-yellow::before{ background:var(--amber); }
+  .status-red{ background:var(--brick-soft); color:var(--brick); }
+  .status-red::before{ background:var(--brick); }
+
+  .history-strip{ display:flex; gap:3px; }
+  .history-dot{ width:9px; height:9px; border-radius:2px; }
+  .history-dot.g{ background:var(--forest); } .history-dot.y{ background:var(--amber); } .history-dot.r{ background:var(--brick); } .history-dot.empty{ background:var(--line); }
+
+  .empty-state{ padding:64px 30px; text-align:center; color:var(--ink-soft); }
+  .empty-state h3{ font-family:var(--serif); color:var(--ink); font-size:18px; margin-bottom:6px; }
+  .empty-state p{ font-size:13px; max-width:420px; margin:0 auto 18px; line-height:1.6; }
+
+  /* ---------- Overview (all plans) ---------- */
+  .plan-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px; }
+  .plan-card{ background:var(--paper-raised); border:1px solid var(--line); border-radius:6px; padding:18px 20px; cursor:pointer; transition:border-color .12s; }
+  .plan-card:hover{ border-color:var(--slate); }
+  .plan-card-top{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+  .plan-card h4{ font-family:var(--serif); font-size:16px; margin:0; }
+  .plan-card .pc-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .plan-card .pc-stats{ display:flex; gap:14px; margin-top:14px; font-size:11.5px; color:var(--ink-soft); }
+  .plan-card .pc-stats b{ color:var(--ink); font-family:var(--mono); }
+
+  /* ---------- Modal ---------- */
+  .overlay{ position:fixed; inset:0; background:rgba(20,33,61,0.42); display:flex; align-items:center; justify-content:center; z-index:50; padding:24px; overflow-y:auto; }
+  .modal{ background:var(--paper-raised); width:100%; max-width:780px; max-height:88vh; overflow-y:auto; border-radius:6px; box-shadow:0 20px 60px rgba(20,33,61,0.3); margin:auto; }
+  .modal.wide{ max-width:920px; }
+  .modal-head{ padding:22px 26px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:flex-start; position:sticky; top:0; background:var(--paper-raised); z-index:2; }
+  .modal-body{ padding:24px 26px; }
+  .modal-close{ cursor:pointer; color:var(--ink-soft); font-size:20px; line-height:1; background:none; border:none; padding:2px; }
+  .field-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 16px; }
+  .field-grid.cols3{ grid-template-columns:1fr 1fr 1fr; }
+  .field-grid.cols4{ grid-template-columns:1fr 1fr 1fr 1fr; }
+  .field{ display:flex; flex-direction:column; gap:5px; }
+  .field label{ font-size:11px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; }
+  .field input, .field select, .field textarea{ font-family:var(--sans); font-size:13px; padding:8px 10px; border:1px solid var(--line-strong); border-radius:3px; background:var(--paper); color:var(--ink); }
+  .field input:focus, .field select:focus, .field textarea:focus{ outline:none; border-color:var(--slate); }
+  .field-note{ font-size:10.5px; color:var(--ink-soft); }
+  .section-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; font-weight:700; color:var(--slate); margin:22px 0 12px; padding-top:18px; border-top:1px solid var(--line); }
+  .section-label:first-child{ margin-top:0; padding-top:0; border-top:none; }
+
+  /* ---------- Detail / seal ---------- */
+  .detail-top{ display:flex; gap:24px; align-items:center; margin-bottom:22px; }
+  .criteria-list{ display:flex; flex-direction:column; border:1px solid var(--line); border-radius:5px; overflow:hidden; }
+  .criteria-row{ display:flex; align-items:center; gap:10px; padding:9px 14px; border-bottom:1px solid var(--line); font-size:12px; background:var(--paper-raised); }
+  .criteria-row:last-child{ border-bottom:none; }
+  .criteria-row .c-label{ flex:1; font-weight:500; }
+  .criteria-row .c-val{ font-family:var(--mono); color:var(--ink-soft); width:76px; text-align:right; }
+  .criteria-row .c-pct{ font-family:var(--mono); width:44px; text-align:right; font-weight:600; }
+  .bar-track{ width:70px; height:5px; background:var(--line); border-radius:3px; overflow:hidden; flex-shrink:0; }
+  .bar-fill{ height:100%; }
+
+  .callout{ padding:10px 14px; border-radius:4px; font-size:12px; line-height:1.55; margin-bottom:16px; }
+  .callout-red{ background:var(--brick-soft); color:var(--brick); }
+  .callout-amber{ background:var(--amber-soft); color:var(--amber); }
+  .callout-slate{ background:var(--slate-soft); color:var(--slate); }
+
+  /* ---------- IPS / Criteria page ---------- */
+  .ips-row{ display:grid; grid-template-columns:1.6fr 100px 90px 130px 1.4fr; gap:12px; align-items:center; padding:11px 4px; border-bottom:1px solid var(--line); font-size:12.5px; }
+  .ips-row.head{ font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); font-weight:600; }
+  .ips-row input, .ips-row select{ font-family:var(--sans); font-size:12px; padding:6px 8px; border:1px solid var(--line-strong); border-radius:3px; width:100%; }
+  .weight-total{ margin-top:14px; font-size:12.5px; }
+  .weight-total.bad{ color:var(--brick); font-weight:600; }
+  .weight-total.ok{ color:var(--forest); font-weight:600; }
+  .card{ background:var(--paper-raised); border:1px solid var(--line); border-radius:5px; padding:22px 24px; margin-bottom:18px; }
+  .card h3{ font-family:var(--serif); font-size:16px; margin:0 0 4px; }
+  .card .card-desc{ color:var(--ink-soft); font-size:12.5px; margin-bottom:16px; }
+
+  /* ---------- TDF module ---------- */
+  .tdf-card{ background:var(--paper-raised); border:1px solid var(--line); border-radius:6px; margin-bottom:16px; overflow:hidden; }
+  .tdf-card-head{ padding:16px 20px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; }
+  .tdf-card-head h3{ font-family:var(--serif); font-size:16px; margin:0; }
+  .tdf-card-head .tdf-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .tdf-card-body{ padding:0 20px 20px; border-top:1px solid var(--line); }
+  .vintage-table{ width:100%; border-collapse:collapse; font-size:12px; margin-top:14px; }
+  .vintage-table th{ text-align:right; font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); padding:7px 8px; border-bottom:1px solid var(--line); }
+  .vintage-table th:first-child, .vintage-table td:first-child{ text-align:left; }
+  .vintage-table td{ text-align:right; padding:6px 8px; border-bottom:1px solid var(--line); font-family:var(--mono); }
+  .vintage-table input{ width:100%; font-family:var(--mono); font-size:12px; padding:5px 6px; border:1px solid var(--line-strong); border-radius:3px; text-align:right; }
+  .glide-flag{ font-size:11px; color:var(--brick); margin-top:8px; padding:8px 10px; background:var(--brick-soft); border-radius:4px; }
+
+  /* ---------- Reports page ---------- */
+  .report-fund-pick{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; }
+  .chip{ padding:6px 12px; border:1px solid var(--line-strong); border-radius:20px; font-size:12px; cursor:pointer; background:var(--paper-raised); user-select:none; }
+  .chip.on{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .report-doc{ background:var(--paper-raised); border:1px solid var(--line); border-radius:5px; }
+  .report-page{ padding:46px 50px; border-bottom:8px solid var(--paper); }
+  .report-page:last-child{ border-bottom:none; }
+  .report-letterhead{ display:flex; justify-content:space-between; align-items:flex-start; padding-bottom:18px; margin-bottom:26px; border-bottom:2px solid var(--ink); }
+  .report-letterhead .rl-title{ font-family:var(--serif); font-size:22px; font-weight:600; }
+  .report-letterhead .rl-sub{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .report-letterhead .rl-meta{ text-align:right; font-size:11px; color:var(--ink-soft); line-height:1.7; }
+  .report-fund-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; gap:16px; }
+  .report-fund-header h2{ font-family:var(--serif); font-size:19px; margin:0 0 2px; }
+  .report-fund-header .rf-sub{ color:var(--ink-soft); font-size:12px; }
+  .report-summary-line{ font-size:12.5px; color:var(--ink-soft); line-height:1.7; margin-bottom:22px; padding:12px 14px; background:#FAF9F5; border-radius:4px; }
+  .report-foot{ margin-top:30px; padding-top:14px; border-top:1px solid var(--line); font-size:10px; color:var(--ink-soft); line-height:1.7; }
+
+  @media print{
+    .sidebar, .page-head .btn-row, .no-print{ display:none !important; }
+    .main{ padding:0; max-width:none; }
+    body{ background:#fff; }
+    .report-doc{ border:none; }
+    .report-page{ border-bottom:none; page-break-after:always; padding:0; }
+  }
+  ::placeholder{ color:#A8A296; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* =========================================================================
+   FIDUCIARY MONITOR — 401(k) plan fund scoring & due-diligence workspace
+   Organized per plan. Each plan has its own fund menu, target-date fund
+   evaluation, IPS criteria, and reports. No live data feed: figures are
+   entered manually or via CSV import per plan. Stored locally per user.
+   ========================================================================= */
+
+const STORAGE_KEY = 'fiduciary-monitor-plans-v1';
+
+/* ---------------------------- Supabase config --------------------------- */
+const SUPABASE_URL = 'https://pdympbpyavilstjsmjtm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBkeW1wYnB5YXZpbHN0anNtanRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3ODc1NjUsImV4cCI6MjEwMTM2MzU2NX0.zb-moqwGSoOB-rq9OSqk6cLt0JqXlzRBLebMLE2R4DA';
+// Acts as a shared secret alongside the publishable key above — don't post this file's
+// contents somewhere public, since anyone with both could read/write this workspace's data.
+const WORKSPACE_ID = 'e830acee0705f0bfe1655c95';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const DEFAULT_CRITERIA = [
+  { key:'expenseRatio',    label:'Expense Ratio (%)',              direction:'lower',  weight:20, hard:false },
+  { key:'managerTenure',   label:'Manager Tenure (yrs)',           direction:'higher', weight:7,  hard:true, hardMin:2 },
+  { key:'alpha3y',         label:'3-Yr Alpha',                     direction:'higher', weight:9,  hard:false },
+  { key:'sharpe3y',        label:'3-Yr Sharpe Ratio',               direction:'higher', weight:9,  hard:false },
+  { key:'stdDev3y',        label:'3-Yr Std. Deviation',             direction:'lower',  weight:5,  hard:false },
+  { key:'rSquared3y',      label:'3-Yr R-Squared',                  direction:'higher', weight:8,  hard:false },
+  { key:'upCapture3y',     label:'Up-Market Capture',                direction:'higher', weight:6,  hard:false },
+  { key:'downCapture3y',   label:'Down-Market Capture',              direction:'lower',  weight:6,  hard:false },
+  { key:'return3y',        label:'3-Yr Return',                      direction:'higher', weight:6,  hard:false },
+  { key:'return5y',        label:'5-Yr Return',                      direction:'higher', weight:6,  hard:false },
+  { key:'excessReturn3y',  label:'3-Yr Excess Return vs. Benchmark',  direction:'higher', weight:12, hard:false, derived:true },
+  { key:'revenueSharingBps', label:'Revenue Sharing (bps)',           direction:'lower',  weight:6,  hard:false },
+];
+
+const FIELD_META = {
+  expenseRatio:{unit:'%', step:'0.01'}, managerTenure:{unit:'yrs', step:'0.5'},
+  alpha3y:{unit:'', step:'0.01'}, sharpe3y:{unit:'', step:'0.01'},
+  stdDev3y:{unit:'', step:'0.01'}, rSquared3y:{unit:'', step:'0.1'},
+  upCapture3y:{unit:'%', step:'0.1'}, downCapture3y:{unit:'%', step:'0.1'},
+  return3y:{unit:'%', step:'0.01'}, return5y:{unit:'%', step:'0.01'},
+  aum:{unit:'$M', step:'1'}, benchmarkReturn3y:{unit:'%', step:'0.01'},
+  revenueSharingBps:{unit:'bps', step:'1'}, excessReturn3y:{unit:'%', step:'0.01'},
+};
+
+function newPlan(name){
+  return {
+    id: uid(), name: name || 'New Plan', sponsor:'', recordkeeper:'', planType:'401(k)',
+    participantCount:null, planAssets:null,
+    criteria: JSON.parse(JSON.stringify(DEFAULT_CRITERIA)),
+    greenThreshold:60, yellowThreshold:40,
+    tdfExpenseCap:0.50,
+    holdings:[], tdfSeries:[], reportSelection:[],
+  };
+}
+
+let state = { plans:[], currentPlanId:null, view:'overview' };
+let ui = { modalFund:null, isNew:false, detailFund:null, planModal:false, planModalNew:false, saveTimer:null, saveState:'loading', openTdfCard:null };
+
+/* ---------------------------- persistence (Supabase) --------------------------- */
+async function loadState(){
+  ui.saveState = 'loading';
+  try{
+    const { data, error } = await sb.from('app_state').select('data').eq('id', WORKSPACE_ID).maybeSingle();
+    if(error) throw error;
+    if(data && data.data && data.data.plans){ state = data.data; }
+    ui.saveState = 'saved';
+  }catch(e){
+    console.error('Supabase load failed:', e && e.message ? e.message : e, e && e.details ? e.details : '', e && e.hint ? e.hint : '');
+    ui.saveState = 'error';
+    ui.lastError = (e && (e.message || e.error_description || e.hint)) || JSON.stringify(e);
+  }
+  if(state.plans.length && !state.currentPlanId) state.currentPlanId = state.plans[0].id;
+  render();
+}
+function saveState(){
+  ui.saveState = 'saving'; renderSaveIndicator();
+  clearTimeout(ui.saveTimer);
+  ui.saveTimer = setTimeout(async ()=>{
+    try{
+      const { error } = await sb.from('app_state').upsert({ id: WORKSPACE_ID, data: state, updated_at: new Date().toISOString() });
+      if(error) throw error;
+      ui.saveState = 'saved';
+    }catch(e){
+      console.error('Supabase save failed:', e && e.message ? e.message : e, e && e.details ? e.details : '', e && e.hint ? e.hint : '');
+      ui.saveState = 'error';
+      ui.lastError = (e && (e.message || e.error_description || e.hint)) || JSON.stringify(e);
+    }
+    renderSaveIndicator();
+  }, 500);
+}
+function saveIndicatorText(){
+  if(ui.saveState==='error') return 'Sync failed: ' + (ui.lastError || 'unknown error');
+  return ui.saveState==='saving' ? 'Saving…' : ui.saveState==='loading' ? 'Loading…' : 'Synced to Supabase';
+}
+function renderSaveIndicator(){
+  const el = document.getElementById('save-indicator');
+  if(!el) return;
+  el.textContent = saveIndicatorText();
+}
+
+function currentPlan(){ return state.plans.find(p=>p.id===state.currentPlanId) || null; }
+
+/* ---------------------------- scoring engine --------------------------- */
+function percentileRank(value, allValues, direction){
+  const vals = allValues.filter(v => typeof v === 'number' && !isNaN(v));
+  if(vals.length <= 1) return 50;
+  const sorted = [...vals].sort((a,b)=>a-b);
+  let below = sorted.filter(v => v < value).length;
+  let equal = sorted.filter(v => v === value).length;
+  let rank = (below + 0.5*equal) / sorted.length;
+  if(direction === 'lower') rank = 1 - rank;
+  return Math.round(rank * 100);
+}
+
+function derivedValue(h, key){
+  if(key === 'excessReturn3y'){
+    if(typeof h.return3y==='number' && typeof h.benchmarkReturn3y==='number') return h.return3y - h.benchmarkReturn3y;
+    return null;
+  }
+  return h[key];
+}
+
+function computeScores(holding, allHoldings, criteria, thresholds){
+  const peers = allHoldings.filter(h => h.category === holding.category);
+  const universe = peers.length >= 3 ? peers : allHoldings;
+  const breakdown = [];
+  let hardFail = null;
+  let weightedSum = 0, weightUsed = 0;
+
+  criteria.forEach(c=>{
+    const value = c.derived ? derivedValue(holding, c.key) : holding[c.key];
+    if(c.hard && typeof value === 'number'){
+      if(c.hardMin !== undefined && c.hardMin !== null && value < c.hardMin){
+        hardFail = c.label + ' below IPS minimum (' + value + ' < ' + c.hardMin + ')';
+      }
+      if(c.hardMax !== undefined && c.hardMax !== null && value > c.hardMax){
+        hardFail = c.label + ' above IPS maximum (' + value + ' > ' + c.hardMax + ')';
+      }
+    }
+    if(typeof value !== 'number' || isNaN(value)){
+      breakdown.push({ key:c.key, label:c.label, value:null, pct:null, weight:c.weight });
+      return;
+    }
+    const allVals = universe.map(h => c.derived ? derivedValue(h, c.key) : h[c.key]);
+    const pct = percentileRank(value, allVals, c.direction);
+    breakdown.push({ key:c.key, label:c.label, value, pct, weight:c.weight });
+    weightedSum += pct * c.weight;
+    weightUsed += c.weight;
+  });
+
+  const overall = weightUsed > 0 ? Math.round(weightedSum / weightUsed) : 0;
+  let status = 'red';
+  if(!hardFail){
+    if(overall >= thresholds.greenThreshold) status = 'green';
+    else if(overall >= thresholds.yellowThreshold) status = 'yellow';
+  }
+  return { overall, status, breakdown, hardFail, peerCount: universe.length, usedFullUniverse: peers.length < 3 };
+}
+
+/* ---- Target-date fund evaluation (separate methodology) ---- */
+function evaluateTdfSeries(series, tdfExpenseCap){
+  const vintages = (series.vintages||[]).slice().sort((a,b)=>a.year-b.year);
+  const withData = vintages.filter(v => typeof v.return3y==='number' && typeof v.benchmarkReturn3y==='number');
+  const excessReturns = withData.map(v => v.return3y - v.benchmarkReturn3y);
+  const avgExcess = excessReturns.length ? excessReturns.reduce((a,b)=>a+b,0)/excessReturns.length : null;
+  const expenseVals = vintages.filter(v=>typeof v.expenseRatio==='number').map(v=>v.expenseRatio);
+  const avgExpense = expenseVals.length ? expenseVals.reduce((a,b)=>a+b,0)/expenseVals.length : null;
+
+  // glide path monotonicity: as target year increases (further from now), equity allocation should not decrease
+  let glideFlag = null;
+  const withEquity = vintages.filter(v=>typeof v.equityAllocation==='number');
+  for(let i=1;i<withEquity.length;i++){
+    if(withEquity[i].equityAllocation < withEquity[i-1].equityAllocation){
+      glideFlag = `Glide path inversion: ${withEquity[i-1].year} vintage (${withEquity[i-1].equityAllocation}% equity) allocates more equity than the later ${withEquity[i].year} vintage (${withEquity[i].equityAllocation}% equity).`;
+      break;
+    }
+  }
+
+  let status = 'yellow';
+  const reasons = [];
+  const expenseCap = typeof tdfExpenseCap==='number' ? tdfExpenseCap : 0.5;
+  const expenseOk = avgExpense===null ? null : avgExpense <= expenseCap;
+  const excessOk = avgExcess===null ? null : avgExcess >= 0;
+
+  if(glideFlag){ status='red'; reasons.push('Glide path inversion detected'); }
+  else if(expenseOk===false && excessOk===false){ status='red'; reasons.push('Expense above cap and lagging benchmark'); }
+  else if(expenseOk===true && excessOk===true){ status='green'; }
+  else if(expenseOk===false || excessOk===false){ status='yellow'; if(expenseOk===false) reasons.push('Expense ratio above plan cap'); if(excessOk===false) reasons.push('Trailing benchmark on average'); }
+  else { status='yellow'; reasons.push('Insufficient vintage data to fully evaluate'); }
+
+  return { avgExcess, avgExpense, glideFlag, status, reasons, vintageCount: vintages.length, withDataCount: withData.length };
+}
+
+/* ------------------------------ helpers -------------------------------- */
+function uid(){ return 'x_' + Math.random().toString(36).slice(2,10); }
+function fmt(v, unit){
+  if(v === null || v === undefined || v === '' || isNaN(v)) return '—';
+  return (unit === '%' ? Number(v).toFixed(2)+'%' : unit === '$M' ? '$'+Number(v).toLocaleString()+'M' : unit === 'bps' ? Number(v).toFixed(0)+' bps' : Number(v).toFixed(2));
+}
+function statusLabel(s){ return s==='green'?'Pass':s==='yellow'?'Watch':'Fail'; }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function scoreColor(pct){ if(pct===null) return 'var(--line)'; if(pct>=60) return 'var(--forest)'; if(pct>=40) return 'var(--amber)'; return 'var(--brick)'; }
+
+/* ------------------------------ rendering ------------------------------ */
+function render(){
+  const app = document.getElementById('app');
+  const plan = currentPlan();
+  app.innerHTML = `
+    ${renderSidebar()}
+    <div class="main">
+      ${state.view==='overview' ? renderOverview() : ''}
+      ${plan && state.view==='watchlist' ? renderWatchlist(plan) : ''}
+      ${plan && state.view==='tdf' ? renderTdf(plan) : ''}
+      ${plan && state.view==='criteria' ? renderCriteria(plan) : ''}
+      ${plan && state.view==='reports' ? renderReports(plan) : ''}
+    </div>
+    ${ui.modalFund !== null ? renderFundModal(plan) : ''}
+    ${ui.detailFund !== null ? renderDetailModal(plan) : ''}
+    ${ui.planModal ? renderPlanModal() : ''}
+  `;
+  attachHandlers();
+}
+
+function renderSidebar(){
+  const plan = currentPlan();
+  const totalFlagged = plan ? plan.holdings.filter(h=>computeScores(h, plan.holdings, plan.criteria, plan).status==='red').length : 0;
+  const options = state.plans.map(p=>`<option value="${p.id}" ${p.id===state.currentPlanId?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
+  return `
+  <div class="sidebar">
+    <div class="brand">Fiduciary Monitor</div>
+    <div class="brand-sub">401(k) Plan Workspace</div>
+
+    <div class="plan-select-label">Plan</div>
+    ${state.plans.length ? `<select class="plan-select" id="plan-switcher">${options}</select>` : `<div class="plan-meta">No plans yet.</div>`}
+    ${plan ? `<div class="plan-meta">${escapeHtml(plan.sponsor||'No sponsor set')}${plan.recordkeeper?' · '+escapeHtml(plan.recordkeeper):''}</div>` : ''}
+    <div class="link-row">
+      <span id="btn-new-plan">+ New Plan</span>
+      ${plan ? `<span id="btn-edit-plan">Plan Details</span>` : ''}
+    </div>
+
+    ${plan ? `
+    <div class="nav-item ${state.view==='watchlist'?'active':''}" data-nav="watchlist">Fund Menu <span class="nav-count">${plan.holdings.length}</span></div>
+    <div class="nav-item ${state.view==='tdf'?'active':''}" data-nav="tdf">Target-Date Funds <span class="nav-count">${plan.tdfSeries.length}</span></div>
+    <div class="nav-item ${state.view==='criteria'?'active':''}" data-nav="criteria">IPS Criteria</div>
+    <div class="nav-item ${state.view==='reports'?'active':''}" data-nav="reports">Reports</div>
+    ` : ''}
+    <div class="nav-divider"></div>
+    <div class="nav-item ${state.view==='overview'?'active':''}" data-nav="overview">All Plans <span class="nav-count">${state.plans.length}</span></div>
+
+    <div class="sidebar-foot">
+      ${totalFlagged>0 ? totalFlagged+' fund(s) flagged Fail in this plan<br>' : ''}
+      <span id="save-indicator">${saveIndicatorText()}</span>
+    </div>
+  </div>`;
+}
+
+/* ---- Overview: all plans ---- */
+function renderOverview(){
+  const cards = state.plans.map(p=>{
+    const flagged = p.holdings.filter(h=>computeScores(h,p.holdings,p.criteria,p).status==='red').length
+      + p.tdfSeries.filter(s=>evaluateTdfSeries(s,p.tdfExpenseCap).status==='red').length;
+    return `
+    <div class="plan-card" data-open-plan="${p.id}">
+      <div class="plan-card-top">
+        <div><h4>${escapeHtml(p.name)}</h4><div class="pc-sub">${escapeHtml(p.sponsor||'No sponsor set')}</div></div>
+        ${flagged>0 ? `<span class="status-pill status-red">${flagged} Fail</span>` : `<span class="status-pill status-green">Clear</span>`}
+      </div>
+      <div class="pc-stats">
+        <span><b>${p.holdings.length}</b> funds</span>
+        <span><b>${p.tdfSeries.length}</b> TDF series</span>
+        <span><b>${p.participantCount ? p.participantCount.toLocaleString() : '—'}</b> participants</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="page-head">
+    <div><h1 class="page-title">All Plans</h1><p class="page-desc">Every plan you monitor, with fund menu size and flagged items at a glance. Select a plan to open its fund menu, target-date fund evaluation, and reports.</p></div>
+    <div class="btn-row"><button class="btn btn-primary" id="btn-new-plan-main">Add Plan</button></div>
+  </div>
+  ${state.plans.length===0 ? `
+    <div class="table-wrap"><div class="empty-state">
+      <h3>No plans yet</h3>
+      <p>Add your first 401(k) plan to start building its fund menu and IPS criteria.</p>
+      <button class="btn btn-primary" id="btn-new-plan-empty">Add a Plan</button>
+    </div></div>
+  ` : `<div class="plan-grid">${cards}</div>`}
+  `;
+}
+
+/* ---- Plan add/edit modal ---- */
+function renderPlanModal(){
+  const p = ui.planModalNew ? newPlan('') : currentPlan();
+  return `
+  <div class="overlay" id="plan-modal-overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <div style="font-family:var(--serif);font-size:19px;font-weight:600;">${ui.planModalNew?'Add Plan':'Plan Details'}</div>
+        <button class="modal-close" id="close-plan-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field-grid cols3">
+          <div class="field"><label>Plan Name</label><input data-pfield="name" value="${escapeHtml(p.name)}" placeholder="Acme Manufacturing 401(k)"></div>
+          <div class="field"><label>Sponsor</label><input data-pfield="sponsor" value="${escapeHtml(p.sponsor)}" placeholder="Acme Manufacturing Inc."></div>
+          <div class="field"><label>Recordkeeper</label><input data-pfield="recordkeeper" value="${escapeHtml(p.recordkeeper)}" placeholder="Empower / Fidelity / etc."></div>
+        </div>
+        <div class="field-grid cols3" style="margin-top:14px;">
+          <div class="field"><label>Plan Type</label><input data-pfield="planType" value="${escapeHtml(p.planType)}" placeholder="401(k)"></div>
+          <div class="field"><label>Participants</label><input type="number" data-pfield="participantCount" value="${p.participantCount??''}"></div>
+          <div class="field"><label>Plan Assets ($M)</label><input type="number" data-pfield="planAssets" value="${p.planAssets??''}"></div>
+        </div>
+        <div class="field-grid" style="margin-top:14px;max-width:320px;">
+          <div class="field"><label>TDF Expense Cap (%)</label><input type="number" step="0.01" data-pfield="tdfExpenseCap" value="${p.tdfExpenseCap??''}"></div>
+        </div>
+        <div class="field-note" style="margin-top:8px;">Used as the reasonableness threshold when evaluating target-date fund series below.</div>
+        <div class="btn-row" style="margin-top:24px; justify-content:space-between;">
+          <div>${!ui.planModalNew && state.plans.length>1 ? `<button class="btn" id="btn-delete-plan" style="color:var(--brick);border-color:var(--brick-soft);">Delete Plan</button>` : '<span></span>'}</div>
+          <div class="btn-row"><button class="btn" id="cancel-plan-modal">Cancel</button><button class="btn btn-primary" id="save-plan-modal">Save Plan</button></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---- Watchlist ---- */
+function renderWatchlist(plan){
+  const rows = plan.holdings.map(h=>{
+    const s = computeScores(h, plan.holdings, plan.criteria, plan);
+    const hist = (h.history||[]).slice(-8);
+    const histDots = Array.from({length:8}).map((_,i)=>{
+      const rec = hist[i];
+      if(!rec) return '<span class="history-dot empty"></span>';
+      const cls = rec.status==='green'?'g':rec.status==='yellow'?'y':'r';
+      return `<span class="history-dot ${cls}" title="${rec.date}: ${rec.overall}/100"></span>`;
+    }).join('');
+    return `
+    <tr data-detail="${h.id}">
+      <td>
+        <div class="fund-name">${escapeHtml(h.ticker)} — ${escapeHtml(h.name)}</div>
+        <div class="fund-cat">${escapeHtml(h.category||'Uncategorized')} ${h.shareClass ? '· <span class="tag">'+escapeHtml(h.shareClass)+'</span>' : ''}</div>
+      </td>
+      <td><span class="status-pill status-${s.status}">${statusLabel(s.status)}</span></td>
+      <td class="num">${s.overall}<span style="color:var(--ink-soft)">/100</span></td>
+      <td class="num">${fmt(h.expenseRatio,'%')}</td>
+      <td class="num">${fmt(h.revenueSharingBps,'bps')}</td>
+      <td class="num">${fmt(derivedValue(h,'excessReturn3y'),'%')}</td>
+      <td><div class="history-strip">${histDots}</div></td>
+      <td style="text-align:right"><button class="btn btn-ghost btn-sm" data-edit="${h.id}">Edit</button></td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Fund Menu — ${escapeHtml(plan.name)}</h1>
+      <p class="page-desc">Actively managed and passive funds only. Target-date series are evaluated separately under Target-Date Funds. Scores rank each fund within its category peer group in this menu.</p>
+    </div>
+    <div class="btn-row">
+      ${plan.holdings.length ? `<button class="btn" id="btn-run-review">Run Quarterly Review</button>` : ''}
+      <button class="btn" id="btn-import">Import CSV</button>
+      <input type="file" id="csv-input" accept=".csv">
+      <button class="btn btn-primary" id="btn-add-fund">Add Fund</button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    ${plan.holdings.length === 0 ? `
+      <div class="empty-state">
+        <h3>No funds in this plan's menu yet</h3>
+        <p>Add a fund manually, or import a CSV with columns: ticker, name, category, shareClass, expenseRatio, managerTenure, alpha3y, sharpe3y, stdDev3y, rSquared3y, upCapture3y, downCapture3y, return3y, return5y, benchmarkIndex, benchmarkReturn3y, revenueSharingBps, aum.</p>
+        <button class="btn btn-primary" id="btn-add-fund-empty">Add your first fund</button>
+      </div>
+    ` : `
+    <table>
+      <thead><tr>
+        <th>Fund</th><th>Status</th><th style="text-align:right">Score</th>
+        <th style="text-align:right">Exp. Ratio</th><th style="text-align:right">Rev. Share</th>
+        <th style="text-align:right">Excess Return</th><th>History</th><th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`}
+  </div>`;
+}
+
+/* ---- Fund add/edit modal ---- */
+function renderFundModal(plan){
+  const isNew = ui.isNew;
+  const h = isNew ? { id:uid(), ticker:'', name:'', category:'', assetClass:'', shareClass:'', aum:null,
+    expenseRatio:null, managerTenure:null, alpha3y:null, sharpe3y:null, stdDev3y:null, rSquared3y:null,
+    upCapture3y:null, downCapture3y:null, return3y:null, return5y:null, benchmarkIndex:'', benchmarkReturn3y:null,
+    revenueSharingBps:null, notes:'', history:[] }
+    : plan.holdings.find(x=>x.id===ui.modalFund);
+
+  const numField = (key,label) => {
+    const meta = FIELD_META[key]||{};
+    return `<div class="field"><label>${label}${meta.unit?' ('+meta.unit+')':''}</label>
+      <input type="number" step="${meta.step||'any'}" data-field="${key}" value="${h[key]??''}"></div>`;
+  };
+
+  return `
+  <div class="overlay" id="fund-modal-overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <div style="font-family:var(--serif);font-size:19px;font-weight:600;">${isNew?'Add Fund':'Edit Fund'}</div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">Enter figures as reported (e.g. expense ratio 0.65 = 0.65%).</div>
+        </div>
+        <button class="modal-close" id="close-fund-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="section-label">Identification</div>
+        <div class="field-grid cols4">
+          <div class="field"><label>Ticker</label><input data-field="ticker" value="${escapeHtml(h.ticker)}" placeholder="VTSAX"></div>
+          <div class="field"><label>Name</label><input data-field="name" value="${escapeHtml(h.name)}" placeholder="Vanguard Total Stock Market"></div>
+          <div class="field"><label>Category / Peer Group</label><input data-field="category" value="${escapeHtml(h.category)}" placeholder="Large Blend"></div>
+          <div class="field"><label>Share Class</label><input data-field="shareClass" value="${escapeHtml(h.shareClass)}" placeholder="R6 / Institutional / Investor"></div>
+        </div>
+        <div class="field-grid cols3" style="margin-top:14px;">
+          <div class="field"><label>Asset Class</label><input data-field="assetClass" value="${escapeHtml(h.assetClass)}" placeholder="US Equity"></div>
+          ${numField('aum','AUM')}
+          ${numField('managerTenure','Manager Tenure')}
+        </div>
+
+        <div class="section-label">Cost, Conflicts &amp; Risk-Adjusted Performance</div>
+        <div class="field-grid cols3">
+          ${numField('expenseRatio','Expense Ratio')}
+          ${numField('revenueSharingBps','Revenue Sharing')}
+          ${numField('alpha3y','3-Yr Alpha')}
+          ${numField('sharpe3y','3-Yr Sharpe Ratio')}
+          ${numField('stdDev3y','3-Yr Std. Deviation')}
+          ${numField('rSquared3y','3-Yr R-Squared')}
+        </div>
+
+        <div class="section-label">Benchmark &amp; Capture</div>
+        <div class="field-grid cols3">
+          <div class="field"><label>Benchmark Index</label><input data-field="benchmarkIndex" value="${escapeHtml(h.benchmarkIndex||'')}" placeholder="Russell 1000 Value"></div>
+          ${numField('benchmarkReturn3y','Benchmark 3-Yr Return')}
+          ${numField('return3y','Fund 3-Yr Return')}
+          ${numField('upCapture3y','Up-Market Capture')}
+          ${numField('downCapture3y','Down-Market Capture')}
+          ${numField('return5y','Fund 5-Yr Return')}
+        </div>
+
+        <div class="section-label">Notes</div>
+        <div class="field">
+          <textarea data-field="notes" rows="3" style="resize:vertical;">${escapeHtml(h.notes||'')}</textarea>
+        </div>
+
+        <div class="btn-row" style="margin-top:24px; justify-content:space-between;">
+          <div>${!isNew ? `<button class="btn" id="btn-delete-fund" style="color:var(--brick);border-color:var(--brick-soft);">Remove Fund</button>` : '<span></span>'}</div>
+          <div class="btn-row">
+            <button class="btn" id="cancel-fund-modal">Cancel</button>
+            <button class="btn btn-primary" id="save-fund-modal" data-id="${h.id}">Save Fund</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---- Fund detail / seal ---- */
+function renderSeal(overall, status, size){
+  size = size || 116;
+  const color = status==='green'?'var(--forest)':status==='yellow'?'var(--amber)':'var(--brick)';
+  const r = size*0.4, c = 2*Math.PI*r, cx=size/2, cy=size/2;
+  const pct = Math.max(0,Math.min(100,overall))/100;
+  const dash = c*pct;
+  return `
+  <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--line)" stroke-width="7"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="7"
+      stroke-dasharray="${dash} ${c}" stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+    <text x="${cx}" y="${cy-4}" text-anchor="middle" font-family="'Source Serif 4',serif" font-size="${size*0.22}" font-weight="600" fill="var(--ink)">${overall}</text>
+    <text x="${cx}" y="${cy+size*0.135}" text-anchor="middle" font-family="'IBM Plex Mono',monospace" font-size="${size*0.078}" letter-spacing="1" fill="var(--ink-soft)">SCORE /100</text>
+  </svg>`;
+}
+
+function renderDetailModal(plan){
+  const h = plan.holdings.find(x=>x.id===ui.detailFund);
+  if(!h) return '';
+  const s = computeScores(h, plan.holdings, plan.criteria, plan);
+  const rows = s.breakdown.map(b=>{
+    const meta = FIELD_META[b.key]||{};
+    return `<div class="criteria-row">
+      <div class="c-label">${escapeHtml(b.label)}</div>
+      <div class="c-val">${fmt(b.value, meta.unit)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${b.pct??0}%; background:${scoreColor(b.pct)}"></div></div>
+      <div class="c-pct">${b.pct===null?'—':b.pct}</div>
+    </div>`;
+  }).join('');
+
+  const histRows = (h.history||[]).slice().reverse().map(r=>`
+    <div class="criteria-row"><div class="c-label">${r.date}</div>
+      <div class="c-val" style="width:auto;flex:1;text-align:left;"><span class="status-pill status-${r.status}">${statusLabel(r.status)}</span></div>
+      <div class="c-pct">${r.overall}</div>
+    </div>`).join('') || `<div style="padding:14px;color:var(--ink-soft);font-size:12px;">No quarterly reviews logged yet.</div>`;
+
+  return `
+  <div class="overlay" id="detail-modal-overlay">
+    <div class="modal">
+      <div class="modal-head">
+        <div>
+          <div style="font-family:var(--serif);font-size:19px;font-weight:600;">${escapeHtml(h.ticker)} — ${escapeHtml(h.name)}</div>
+          <div style="font-size:12px;color:var(--ink-soft);margin-top:2px;">${escapeHtml(h.category||'Uncategorized')}${h.shareClass?' · '+escapeHtml(h.shareClass)+' share class':''} · scored against ${s.peerCount} ${s.usedFullUniverse?'holding(s) (full menu — thin peer group)':'peer(s) in category'}</div>
+        </div>
+        <button class="modal-close" id="close-detail-modal">×</button>
+      </div>
+      <div class="modal-body">
+        ${s.hardFail ? `<div class="callout callout-red"><strong>IPS hard-criterion failure:</strong> ${escapeHtml(s.hardFail)}</div>` : ''}
+        ${h.benchmarkIndex ? `<div class="callout callout-slate">Benchmarked against <strong>${escapeHtml(h.benchmarkIndex)}</strong>${typeof h.benchmarkReturn3y==='number' && typeof h.return3y==='number' ? ' · 3-yr excess return: '+fmt(h.return3y-h.benchmarkReturn3y,'%') : ''}</div>` : ''}
+        <div class="detail-top">
+          <div>${renderSeal(s.overall, s.status)}</div>
+          <div style="flex:1;">
+            <span class="status-pill status-${s.status}" style="font-size:12px;padding:5px 12px 5px 9px;">${statusLabel(s.status)}</span>
+            <p style="font-size:12.5px; color:var(--ink-soft); line-height:1.6; margin-top:10px;">
+              Composite score is the weight-adjusted average of this fund's percentile rank on each IPS criterion, measured against its category peer group in this plan's menu.
+              ${h.notes ? '<br><br><strong>Notes:</strong> '+escapeHtml(h.notes) : ''}
+            </p>
+          </div>
+        </div>
+        <div class="section-label">Criteria Breakdown</div>
+        <div class="criteria-list">${rows}</div>
+        <div class="section-label">Review History</div>
+        <div class="criteria-list">${histRows}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---- Target-Date Funds page ---- */
+function renderTdf(plan){
+  const cards = plan.tdfSeries.map(series=>{
+    const ev = evaluateTdfSeries(series, plan.tdfExpenseCap);
+    const isOpen = ui.openTdfCard === series.id;
+    const vintages = (series.vintages||[]).slice().sort((a,b)=>a.year-b.year);
+    const vRows = vintages.map((v,i)=>`
+      <tr data-vintage-row="${series.id}:${i}">
+        <td>${v.year}</td>
+        <td><input type="number" step="0.1" data-vfield="equityAllocation" value="${v.equityAllocation??''}" placeholder="%"></td>
+        <td><input type="number" step="0.01" data-vfield="expenseRatio" value="${v.expenseRatio??''}" placeholder="%"></td>
+        <td><input type="number" step="0.01" data-vfield="return3y" value="${v.return3y??''}" placeholder="%"></td>
+        <td><input type="number" step="0.01" data-vfield="benchmarkReturn3y" value="${v.benchmarkReturn3y??''}" placeholder="%"></td>
+        <td><button class="btn btn-ghost btn-sm" data-remove-vintage="${series.id}:${i}" style="color:var(--brick);">×</button></td>
+      </tr>`).join('');
+
+    return `
+    <div class="tdf-card">
+      <div class="tdf-card-head" data-toggle-tdf="${series.id}">
+        <div>
+          <h3>${escapeHtml(series.seriesName)} <span style="color:var(--ink-soft);font-weight:400;font-size:13px;">— ${escapeHtml(series.provider||'')}</span></h3>
+          <div class="tdf-sub">${series.glidePathType==='through'?'Through-retirement glide path':'To-retirement glide path'} · Benchmark: ${escapeHtml(series.benchmarkSeries||'—')} · ${ev.vintageCount} vintage(s)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${typeof ev.avgExpense==='number' ? `<span class="mono" style="font-size:12px;color:var(--ink-soft);">${fmt(ev.avgExpense,'%')} avg exp.</span>` : ''}
+          <span class="status-pill status-${ev.status}">${statusLabel(ev.status)}</span>
+          <button class="btn btn-ghost btn-sm" data-edit-tdf-meta="${series.id}">Edit</button>
+          <button class="btn btn-ghost btn-sm" data-remove-tdf="${series.id}" style="color:var(--brick);">Remove</button>
+        </div>
+      </div>
+      ${isOpen ? `
+      <div class="tdf-card-body">
+        ${ev.glideFlag ? `<div class="glide-flag">${escapeHtml(ev.glideFlag)}</div>` : ''}
+        ${ev.reasons.length ? `<div class="field-note" style="margin-top:12px;">${ev.reasons.join(' · ')}</div>` : ''}
+        <table class="vintage-table">
+          <thead><tr><th>Vintage</th><th>Equity %</th><th>Expense Ratio</th><th>3-Yr Return</th><th>Benchmark 3-Yr</th><th></th></tr></thead>
+          <tbody>${vRows}</tbody>
+        </table>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-sm" data-add-vintage="${series.id}">Add Vintage</button>
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Target-Date Funds — ${escapeHtml(plan.name)}</h1>
+      <p class="page-desc">Evaluated separately from the active fund menu: by glide path type and consistency across vintages, average expense ratio against the plan's cap (${fmt(plan.tdfExpenseCap,'%')}), and average 3-yr excess return vs. the named benchmark series.</p>
+    </div>
+    <div class="btn-row"><button class="btn btn-primary" id="btn-add-tdf">Add TDF Series</button></div>
+  </div>
+  ${plan.tdfSeries.length===0 ? `
+    <div class="table-wrap"><div class="empty-state">
+      <h3>No target-date series added</h3>
+      <p>Add the plan's QDIA target-date series, then add each vintage (e.g. 2030, 2035, 2040…) with its equity allocation, expense ratio, and returns.</p>
+      <button class="btn btn-primary" id="btn-add-tdf-empty">Add TDF Series</button>
+    </div></div>
+  ` : cards}
+  `;
+}
+
+/* ---- IPS Criteria page ---- */
+function renderCriteria(plan){
+  const totalWeight = plan.criteria.reduce((s,c)=>s+Number(c.weight||0),0);
+  const rows = plan.criteria.map((c,i)=>`
+    <div class="ips-row">
+      <input data-crit="label" data-idx="${i}" value="${escapeHtml(c.label)}">
+      <select data-crit="direction" data-idx="${i}">
+        <option value="higher" ${c.direction==='higher'?'selected':''}>Higher = better</option>
+        <option value="lower" ${c.direction==='lower'?'selected':''}>Lower = better</option>
+      </select>
+      <input type="number" data-crit="weight" data-idx="${i}" value="${c.weight}" min="0" max="100">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-soft);">
+        <input type="checkbox" data-crit="hard" data-idx="${i}" ${c.hard?'checked':''} style="width:auto;"> Hard min ${c.hard ? '('+(c.hardMin??0)+')' : ''}
+      </label>
+      <button class="btn btn-ghost btn-sm" data-remove-crit="${i}" style="justify-self:end;color:var(--brick);">Remove</button>
+    </div>`).join('');
+
+  return `
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">IPS Criteria — ${escapeHtml(plan.name)}</h1>
+      <p class="page-desc">This plan's Investment Policy Statement criteria for the active/passive fund menu. Weights should sum to 100. Target-date funds use a separate evaluation, set on the Target-Date Funds page.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Scoring Criteria</h3>
+    <div class="card-desc">Percentile scoring is relative to each fund's category peer group within this plan's menu. "3-Yr Excess Return vs. Benchmark" is calculated automatically from each fund's return and benchmark return.</div>
+    <div class="ips-row head"><div>Criterion</div><div>Direction</div><div>Weight %</div><div>Hard rule</div><div></div></div>
+    ${rows}
+    <div class="weight-total ${totalWeight===100?'ok':'bad'}">Total weight: ${totalWeight}% ${totalWeight===100?'✓ balanced':'— should equal 100%'}</div>
+    <div class="btn-row" style="margin-top:16px;">
+      <button class="btn btn-sm" id="btn-add-criterion">Add Criterion</button>
+      <button class="btn btn-sm" id="btn-reset-criteria">Reset to Default Set</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Status Thresholds</h3>
+    <div class="card-desc">Composite score bands that determine Pass / Watch / Fail for this plan's fund menu.</div>
+    <div class="field-grid" style="max-width:420px;">
+      <div class="field"><label>Green (Pass) minimum score</label><input type="number" id="green-threshold" value="${plan.greenThreshold}" min="0" max="100"></div>
+      <div class="field"><label>Yellow (Watch) minimum score</label><input type="number" id="yellow-threshold" value="${plan.yellowThreshold}" min="0" max="100"></div>
+    </div>
+    <div class="field-note" style="margin-top:10px;">Below the Watch threshold — or any hard-minimum failure — is scored Fail.</div>
+  </div>`;
+}
+
+/* ---- Reports page ---- */
+function renderReports(plan){
+  if(plan.holdings.length===0 && plan.tdfSeries.length===0){
+    return `<div class="page-head"><div><h1 class="page-title">Reports — ${escapeHtml(plan.name)}</h1><p class="page-desc">Add funds or a target-date series to this plan first.</p></div></div>`;
+  }
+  const chips = plan.holdings.map(h=>`<div class="chip ${plan.reportSelection.includes(h.id)?'on':''}" data-chip="${h.id}">${escapeHtml(h.ticker)}</div>`).join('');
+  const selected = plan.holdings.filter(h=>plan.reportSelection.includes(h.id));
+  const genDate = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+
+  const fundPages = selected.map(h=>{
+    const s = computeScores(h, plan.holdings, plan.criteria, plan);
+    const rows = s.breakdown.map(b=>{
+      const meta = FIELD_META[b.key]||{};
+      return `<div class="criteria-row"><div class="c-label">${escapeHtml(b.label)}</div>
+        <div class="c-val">${fmt(b.value, meta.unit)}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${b.pct??0}%;background:${scoreColor(b.pct)}"></div></div>
+        <div class="c-pct">${b.pct===null?'—':b.pct}</div></div>`;
+    }).join('');
+    return `
+    <div class="report-page">
+      <div class="report-fund-header">
+        <div><h2>${escapeHtml(h.ticker)} — ${escapeHtml(h.name)}</h2><div class="rf-sub">${escapeHtml(h.category||'Uncategorized')}${h.shareClass?' · '+escapeHtml(h.shareClass):''} · Reviewed ${genDate}</div></div>
+        <div>${renderSeal(s.overall, s.status)}</div>
+      </div>
+      ${s.hardFail ? `<div class="callout callout-red"><strong>IPS hard-criterion failure:</strong> ${escapeHtml(s.hardFail)}</div>` : ''}
+      <div class="report-summary-line"><strong>Status: ${statusLabel(s.status)}.</strong> Composite score of ${s.overall}/100 across ${s.breakdown.length} IPS criteria, ranked against ${s.peerCount} fund(s) in the ${s.usedFullUniverse?'full plan menu (thin peer group)':'category peer group'}.${h.benchmarkIndex?' Benchmarked against '+escapeHtml(h.benchmarkIndex)+'.':''}</div>
+      <div class="criteria-list">${rows}</div>
+      <div class="report-foot">Prepared for plan fiduciary review. Percentile scores are relative to the peer set defined above and reflect data entered by the reviewer as of the date shown. This report does not constitute investment advice.</div>
+    </div>`;
+  }).join('');
+
+  const tdfPages = plan.tdfSeries.map(series=>{
+    const ev = evaluateTdfSeries(series, plan.tdfExpenseCap);
+    const vintages = (series.vintages||[]).slice().sort((a,b)=>a.year-b.year);
+    const vRows = vintages.map(v=>`<div class="criteria-row">
+      <div class="c-label">${v.year} vintage</div>
+      <div class="c-val" style="width:auto;flex:1;text-align:right;">${typeof v.equityAllocation==='number'?v.equityAllocation+'% eq.':'—'} · ${fmt(v.expenseRatio,'%')} · ${fmt(v.return3y,'%')} vs ${fmt(v.benchmarkReturn3y,'%')} bmk</div>
+    </div>`).join('');
+    return `
+    <div class="report-page">
+      <div class="report-fund-header">
+        <div><h2>${escapeHtml(series.seriesName)}</h2><div class="rf-sub">${escapeHtml(series.provider||'')} · ${series.glidePathType==='through'?'Through-retirement':'To-retirement'} glide path · Reviewed ${genDate}</div></div>
+        <span class="status-pill status-${ev.status}" style="font-size:12px;padding:6px 14px 6px 10px;">${statusLabel(ev.status)}</span>
+      </div>
+      ${ev.glideFlag ? `<div class="callout callout-red"><strong>Glide path finding:</strong> ${escapeHtml(ev.glideFlag)}</div>` : ''}
+      <div class="report-summary-line">Average expense ratio ${fmt(ev.avgExpense,'%')} vs. plan cap of ${fmt(plan.tdfExpenseCap,'%')}. Average 3-yr excess return vs. ${escapeHtml(series.benchmarkSeries||'named benchmark')}: ${ev.avgExcess===null?'—':fmt(ev.avgExcess,'%')}, based on ${ev.withDataCount} of ${ev.vintageCount} vintage(s) with complete data.</div>
+      <div class="criteria-list">${vRows || '<div style="padding:14px;color:var(--ink-soft);font-size:12px;">No vintages entered.</div>'}</div>
+      <div class="report-foot">Target-date evaluation is separate from the active/passive fund scoring methodology and reflects glide path structure, cost, and benchmark-relative performance across vintages.</div>
+    </div>`;
+  }).join('');
+
+  const anySelected = selected.length>0 || plan.tdfSeries.length>0;
+
+  return `
+  <div class="page-head">
+    <div><h1 class="page-title">Reports — ${escapeHtml(plan.name)}</h1><p class="page-desc">Select funds to include. Target-date series are always included when present. Print or save as PDF using your browser's print dialog.</p></div>
+    <div class="btn-row"><button class="btn btn-primary" id="btn-print-report" ${!anySelected?'disabled':''}>Print / Save PDF</button></div>
+  </div>
+  ${plan.holdings.length ? `<div class="report-fund-pick no-print">${chips}</div>` : ''}
+  ${!anySelected ? `<div class="table-wrap"><div class="empty-state"><h3>Select funds above</h3><p>Choose one or more funds, or add a target-date series, to generate a report.</p></div></div>` : `
+  <div class="report-doc">
+    <div class="report-page" style="border-bottom:none;padding-bottom:0;">
+      <div class="report-letterhead">
+        <div><div class="rl-title">401(k) Plan Investment Due Diligence Report</div><div class="rl-sub">${escapeHtml(plan.name)} — ${escapeHtml(plan.sponsor||'')}</div></div>
+        <div class="rl-meta">Prepared ${genDate}<br>${selected.length} fund(s) · ${plan.tdfSeries.length} TDF series</div>
+      </div>
+    </div>
+    ${fundPages}${tdfPages}
+  </div>`}
+  `;
+}
+
+/* ------------------------------ handlers -------------------------------- */
+function attachHandlers(){
+  document.querySelectorAll('[data-nav]').forEach(el=>{ el.onclick = ()=>{ state.view = el.dataset.nav; render(); }; });
+
+  const switcher = document.getElementById('plan-switcher');
+  if(switcher) switcher.onchange = ()=>{ state.currentPlanId = switcher.value; if(state.view==='overview') state.view='watchlist'; saveState(); render(); };
+
+  document.querySelectorAll('#btn-new-plan, #btn-new-plan-main, #btn-new-plan-empty').forEach(el=>{
+    el.onclick = ()=>{ ui.planModal=true; ui.planModalNew=true; render(); };
+  });
+  const editPlanBtn = document.getElementById('btn-edit-plan');
+  if(editPlanBtn) editPlanBtn.onclick = ()=>{ ui.planModal=true; ui.planModalNew=false; render(); };
+  document.querySelectorAll('[data-open-plan]').forEach(el=>{
+    el.onclick = ()=>{ state.currentPlanId = el.dataset.openPlan; state.view='watchlist'; saveState(); render(); };
+  });
+
+  // plan modal
+  const pOverlay = document.getElementById('plan-modal-overlay');
+  if(pOverlay) pOverlay.onclick = (e)=>{ if(e.target.id==='plan-modal-overlay'){ ui.planModal=false; render(); } };
+  const pClose = document.getElementById('close-plan-modal'); if(pClose) pClose.onclick = ()=>{ ui.planModal=false; render(); };
+  const pCancel = document.getElementById('cancel-plan-modal'); if(pCancel) pCancel.onclick = ()=>{ ui.planModal=false; render(); };
+  const pSave = document.getElementById('save-plan-modal');
+  if(pSave) pSave.onclick = ()=>{
+    const overlayEl = document.getElementById('plan-modal-overlay');
+    const inputs = overlayEl.querySelectorAll('[data-pfield]');
+    const data = {};
+    inputs.forEach(inp=>{
+      const key = inp.dataset.pfield;
+      const numeric = ['participantCount','planAssets','tdfExpenseCap'].includes(key);
+      data[key] = numeric ? (inp.value===''?null:Number(inp.value)) : inp.value;
+    });
+    if(!data.name){ alert('Plan name is required.'); return; }
+    if(ui.planModalNew){
+      const p = newPlan(data.name); Object.assign(p, data); state.plans.push(p); state.currentPlanId = p.id; state.view='watchlist';
+    }else{
+      Object.assign(currentPlan(), data);
+    }
+    ui.planModal=false; saveState(); render();
+  };
+  const pDelete = document.getElementById('btn-delete-plan');
+  if(pDelete) pDelete.onclick = ()=>{
+    if(confirm('Delete this plan and all its fund data? This cannot be undone.')){
+      state.plans = state.plans.filter(p=>p.id!==state.currentPlanId);
+      state.currentPlanId = state.plans.length ? state.plans[0].id : null;
+      ui.planModal=false; state.view = state.plans.length ? 'watchlist' : 'overview';
+      saveState(); render();
+    }
+  };
+
+  const plan = currentPlan();
+
+  // watchlist
+  document.querySelectorAll('#btn-add-fund, #btn-add-fund-empty').forEach(el=>{
+    el.onclick = ()=>{ ui.isNew=true; ui.modalFund='new'; render(); };
+  });
+  document.querySelectorAll('[data-edit]').forEach(el=>{ el.onclick=(e)=>{ e.stopPropagation(); ui.isNew=false; ui.modalFund=el.dataset.edit; render(); }; });
+  document.querySelectorAll('[data-detail]').forEach(el=>{ el.onclick=()=>{ ui.detailFund=el.dataset.detail; render(); }; });
+  const runReview = document.getElementById('btn-run-review');
+  if(runReview) runReview.onclick = ()=>{
+    const date = todayStr();
+    plan.holdings.forEach(h=>{ const s = computeScores(h, plan.holdings, plan.criteria, plan); h.history=h.history||[]; h.history.push({date, overall:s.overall, status:s.status}); });
+    saveState(); render();
+  };
+  const importBtn = document.getElementById('btn-import');
+  if(importBtn) importBtn.onclick = ()=> document.getElementById('csv-input').click();
+  const csvInput = document.getElementById('csv-input');
+  if(csvInput) csvInput.onchange = handleCsvImport;
+
+  // fund modal
+  const overlay = document.getElementById('fund-modal-overlay');
+  if(overlay) overlay.onclick=(e)=>{ if(e.target.id==='fund-modal-overlay') closeFundModal(); };
+  const closeBtn = document.getElementById('close-fund-modal'); if(closeBtn) closeBtn.onclick = closeFundModal;
+  const cancelBtn = document.getElementById('cancel-fund-modal'); if(cancelBtn) cancelBtn.onclick = closeFundModal;
+  const saveBtn = document.getElementById('save-fund-modal'); if(saveBtn) saveBtn.onclick = saveFundFromModal;
+  const delBtn = document.getElementById('btn-delete-fund');
+  if(delBtn) delBtn.onclick = ()=>{ plan.holdings = plan.holdings.filter(h=>h.id!==ui.modalFund); ui.modalFund=null; saveState(); render(); };
+
+  // detail modal
+  const dOverlay = document.getElementById('detail-modal-overlay');
+  if(dOverlay) dOverlay.onclick=(e)=>{ if(e.target.id==='detail-modal-overlay'){ ui.detailFund=null; render(); } };
+  const dClose = document.getElementById('close-detail-modal'); if(dClose) dClose.onclick = ()=>{ ui.detailFund=null; render(); };
+
+  // criteria page
+  document.querySelectorAll('[data-crit]').forEach(el=>{
+    el.onchange = ()=>{
+      const idx = Number(el.dataset.idx); const field = el.dataset.crit;
+      if(field==='hard') plan.criteria[idx].hard = el.checked;
+      else if(field==='weight') plan.criteria[idx].weight = Number(el.value)||0;
+      else plan.criteria[idx][field] = el.value;
+      if(field==='hard' && el.checked && plan.criteria[idx].hardMin==null) plan.criteria[idx].hardMin = 0;
+      saveState(); render();
+    };
+  });
+  document.querySelectorAll('[data-remove-crit]').forEach(el=>{ el.onclick=()=>{ plan.criteria.splice(Number(el.dataset.removeCrit),1); saveState(); render(); }; });
+  const addCrit = document.getElementById('btn-add-criterion');
+  if(addCrit) addCrit.onclick = ()=>{ plan.criteria.push({ key:'custom_'+uid(), label:'New Criterion', direction:'higher', weight:0, hard:false }); saveState(); render(); };
+  const resetCrit = document.getElementById('btn-reset-criteria');
+  if(resetCrit) resetCrit.onclick = ()=>{ if(confirm("Reset this plan's criteria to the default IPS set?")){ plan.criteria = JSON.parse(JSON.stringify(DEFAULT_CRITERIA)); saveState(); render(); } };
+  const gT = document.getElementById('green-threshold'); if(gT) gT.onchange = ()=>{ plan.greenThreshold = Number(gT.value); saveState(); render(); };
+  const yT = document.getElementById('yellow-threshold'); if(yT) yT.onchange = ()=>{ plan.yellowThreshold = Number(yT.value); saveState(); render(); };
+
+  // reports
+  document.querySelectorAll('[data-chip]').forEach(el=>{
+    el.onclick = ()=>{ const id=el.dataset.chip; const i=plan.reportSelection.indexOf(id); if(i>-1) plan.reportSelection.splice(i,1); else plan.reportSelection.push(id); saveState(); render(); };
+  });
+  const printBtn = document.getElementById('btn-print-report'); if(printBtn) printBtn.onclick = ()=> window.print();
+
+  // TDF page
+  document.querySelectorAll('#btn-add-tdf, #btn-add-tdf-empty').forEach(el=>{
+    el.onclick = ()=>{
+      const s = { id:uid(), seriesName:'New TDF Series', provider:'', glidePathType:'to', benchmarkSeries:'', vintages:[] };
+      plan.tdfSeries.push(s); ui.openTdfCard = s.id; saveState(); render();
+    };
+  });
+  document.querySelectorAll('[data-toggle-tdf]').forEach(el=>{
+    el.onclick = (e)=>{ if(e.target.closest('button')) return; const id = el.dataset.toggleTdf; ui.openTdfCard = ui.openTdfCard===id ? null : id; render(); };
+  });
+  document.querySelectorAll('[data-remove-tdf]').forEach(el=>{
+    el.onclick = ()=>{ plan.tdfSeries = plan.tdfSeries.filter(s=>s.id!==el.dataset.removeTdf); saveState(); render(); };
+  });
+  document.querySelectorAll('[data-edit-tdf-meta]').forEach(el=>{
+    el.onclick = ()=>{
+      const s = plan.tdfSeries.find(x=>x.id===el.dataset.editTdfMeta);
+      const name = prompt('Series name', s.seriesName); if(name===null) return;
+      const provider = prompt('Provider', s.provider||''); if(provider===null) return;
+      const glide = prompt('Glide path type: type "to" or "through"', s.glidePathType||'to'); if(glide===null) return;
+      const bmk = prompt('Benchmark series (e.g. S&P Target Date Index)', s.benchmarkSeries||''); if(bmk===null) return;
+      s.seriesName=name; s.provider=provider; s.glidePathType = glide==='through'?'through':'to'; s.benchmarkSeries=bmk;
+      saveState(); render();
+    };
+  });
+  document.querySelectorAll('[data-add-vintage]').forEach(el=>{
+    el.onclick = ()=>{
+      const s = plan.tdfSeries.find(x=>x.id===el.dataset.addVintage);
+      const yearStr = prompt('Vintage year (e.g. 2035)'); if(!yearStr) return;
+      const year = Number(yearStr); if(isNaN(year)) { alert('Enter a valid year.'); return; }
+      s.vintages = s.vintages||[]; s.vintages.push({ year, equityAllocation:null, expenseRatio:null, return3y:null, benchmarkReturn3y:null });
+      saveState(); render();
+    };
+  });
+  document.querySelectorAll('[data-remove-vintage]').forEach(el=>{
+    el.onclick = ()=>{
+      const [sid, idx] = el.dataset.removeVintage.split(':');
+      const s = plan.tdfSeries.find(x=>x.id===sid);
+      s.vintages.splice(Number(idx),1); saveState(); render();
+    };
+  });
+  document.querySelectorAll('[data-vfield]').forEach(el=>{
+    el.onchange = ()=>{
+      const row = el.closest('tr'); const [sid, idx] = row.dataset.vintageRow.split(':');
+      const s = plan.tdfSeries.find(x=>x.id===sid);
+      const sorted = s.vintages.slice().sort((a,b)=>a.year-b.year);
+      const vintage = sorted[Number(idx)];
+      const orig = s.vintages.find(v=>v===vintage);
+      orig[el.dataset.vfield] = el.value===''?null:Number(el.value);
+      saveState(); render();
+    };
+  });
+}
+
+function closeFundModal(){ ui.modalFund = null; render(); }
+
+function saveFundFromModal(){
+  const plan = currentPlan();
+  const overlayEl = document.getElementById('fund-modal-overlay');
+  const inputs = overlayEl.querySelectorAll('[data-field]');
+  const data = {};
+  inputs.forEach(inp=>{
+    const key = inp.dataset.field;
+    const isNumeric = FIELD_META[key] !== undefined;
+    data[key] = isNumeric ? (inp.value===''?null:Number(inp.value)) : inp.value;
+  });
+  if(!data.ticker){ alert('Ticker is required.'); return; }
+
+  if(ui.isNew){
+    const newHolding = Object.assign({ id: uid(), history: [] }, data);
+    plan.holdings.push(newHolding);
+  }else{
+    const h = plan.holdings.find(x=>x.id===ui.modalFund);
+    Object.assign(h, data);
+  }
+  ui.modalFund = null; ui.isNew = false;
+  saveState(); render();
+}
+
+function handleCsvImport(e){
+  const plan = currentPlan();
+  const file = e.target.files[0];
+  if(!file) return;
+  Papa.parse(file, {
+    header:true, skipEmptyLines:true, dynamicTyping:true,
+    complete: (results)=>{
+      const rows = results.data;
+      let added = 0;
+      rows.forEach(r=>{
+        if(!r.ticker) return;
+        const h = { id:uid(), history:[],
+          ticker:String(r.ticker).trim(), name:r.name||'', category:r.category||'', assetClass:r.assetClass||'', shareClass:r.shareClass||'',
+          aum: r.aum ?? null, expenseRatio: r.expenseRatio ?? null, managerTenure: r.managerTenure ?? null,
+          alpha3y: r.alpha3y ?? null, sharpe3y: r.sharpe3y ?? null, stdDev3y: r.stdDev3y ?? null,
+          rSquared3y: r.rSquared3y ?? null, upCapture3y: r.upCapture3y ?? null, downCapture3y: r.downCapture3y ?? null,
+          return3y: r.return3y ?? null, return5y: r.return5y ?? null,
+          benchmarkIndex: r.benchmarkIndex||'', benchmarkReturn3y: r.benchmarkReturn3y ?? null,
+          revenueSharingBps: r.revenueSharingBps ?? null, notes: r.notes||''
+        };
+        plan.holdings.push(h); added++;
+      });
+      saveState(); render();
+      alert(added + ' fund(s) imported.');
+    },
+    error: ()=> alert('Could not parse that CSV. Check the column headers and try again.')
+  });
+  e.target.value = '';
+}
+
+loadState();
+</script>
+</body>
+</html>
